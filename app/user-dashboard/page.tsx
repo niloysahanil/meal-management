@@ -1,31 +1,23 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { db } from "@/lib/firebase"; 
-import { collection, getDocs, query } from "firebase/firestore";
+import { collection, getDocs, query, onSnapshot } from "firebase/firestore";
 
 interface Member { id: string; name: string; regularMeals: number; guestMeals: number; deposit: number; }
-interface Expense { id: string; item: string; amount: number; date?: string; } // 🎯 date যোগ করা হলো
+interface Expense { id: string; item: string; amount: number; date?: string; }
 interface ArchivedMember { name: string; deposit: number; totalMeals: number; totalCost: number; status: number | string; }
-interface MonthHistory { id: string; monthName: string; mealRate: string | number; totalExpenses: number; totalMeals: number; members: ArchivedMember[]; expenses?: Expense[]; closedAt?: string; } // 🎯 archives এ expenses ব্যাকআপ রাখার জন্য
+interface MonthHistory { id: string; monthName: string; mealRate: string | number; totalExpenses: number; totalMeals: number; members: ArchivedMember[]; expenses?: Expense[]; closedAt?: string; }
 
 export default function UserDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<MonthHistory[]>([]);
-  const [userTab, setUserTab] = useState<"live" | "bazar" | "history">("live"); // 🎯 নতুন ট্যাব 'bazar' যোগ করা হলো
+  const [userTab, setUserTab] = useState<"live" | "bazar" | "history">("live");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
-  // Greeting State
   const [timeGreeting, setTimeGreeting] = useState({ title: "Welcome !", subtitle: "" });
 
   useEffect(() => {
-    // Load local storage data for Live Matrix & Bazar History
-    const localMembers = localStorage.getItem("wh_members");
-    const localExpenses = localStorage.getItem("wh_expenses");
-    if (localMembers) setMembers(JSON.parse(localMembers));
-    if (localExpenses) setExpenses(JSON.parse(localExpenses));
-
-    // Dynamic Time Greeting Logic
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) {
       setTimeGreeting({ 
@@ -48,9 +40,25 @@ export default function UserDashboard() {
         subtitle: "Time to rest and recharge. Wishing you a peaceful night and a fresh start tomorrow." 
       });
     }
+
+    const unsubscribeMembers = onSnapshot(collection(db, "members"), (snapshot) => {
+      const liveMembers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
+      setMembers(liveMembers);
+      localStorage.setItem("wh_members", JSON.stringify(liveMembers)); 
+    });
+
+    const unsubscribeExpenses = onSnapshot(collection(db, "expenses"), (snapshot) => {
+      const liveExpenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense));
+      setExpenses(liveExpenses);
+      localStorage.setItem("wh_expenses", JSON.stringify(liveExpenses));
+    });
+
+    return () => {
+      unsubscribeMembers();
+      unsubscribeExpenses();
+    };
   }, []);
 
-  // ফায়ারবেস থেকে হিস্ট্রি আনার ফাংশন
   useEffect(() => {
     if (userTab === "history") {
       const fetchHistory = async () => {
@@ -70,7 +78,7 @@ export default function UserDashboard() {
 
           setHistory(fetchedData);
         } catch (error) {
-          console.error("Error fetching history from Firebase: ", error);
+          console.error(error);
         } finally {
           setIsLoadingHistory(false);
         }
@@ -88,7 +96,6 @@ export default function UserDashboard() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col text-slate-800 font-sans selection:bg-emerald-200">
       
-      {/* BEAUTIFUL HEADER BANNER */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
@@ -98,7 +105,6 @@ export default function UserDashboard() {
               <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Resident Portal</p>
             </div>
           </div>
-          {/* 🎯 ট্যাব সেকশন আপডেট করা হলো (তিনটি অপশন করার জন্য) */}
           <div className="flex w-full sm:w-auto bg-slate-100 p-1 rounded-2xl overflow-x-auto no-scrollbar gap-1">
             <button onClick={() => setUserTab("live")} className={`flex-1 sm:flex-none whitespace-nowrap px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${userTab === "live" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Live Matrix</button>
             <button onClick={() => setUserTab("bazar")} className={`flex-1 sm:flex-none whitespace-nowrap px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${userTab === "bazar" ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Bazar History</button>
@@ -109,7 +115,6 @@ export default function UserDashboard() {
 
       <main className="flex-1 p-4 md:p-10 max-w-6xl mx-auto w-full overflow-hidden">
         
-        {/* DYNAMIC TIME GREETING BANNER */}
         <div className="bg-[#F0F4F8] rounded-3xl p-5 md:p-6 mb-6 md:mb-8 shadow-sm border border-white">
           <h2 className="text-[#4A85F6] text-lg md:text-xl font-black tracking-wide mb-1.5">
             {timeGreeting.title}
@@ -119,7 +124,6 @@ export default function UserDashboard() {
           </p>
         </div>
         
-        {/* ================= LIVE MATRIX TAB ================= */}
         {userTab === "live" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out w-full">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
@@ -187,7 +191,6 @@ export default function UserDashboard() {
           </div>
         )}
 
-        {/* ================= 🎯 NEW BAZAR HISTORY TAB ================= */}
         {userTab === "bazar" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out w-full">
             <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-4 md:mb-6 flex items-center gap-2">
@@ -228,7 +231,6 @@ export default function UserDashboard() {
           </div>
         )}
 
-        {/* ================= HISTORY VAULT TAB ================= */}
         {userTab === "history" && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out w-full">
             <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-4 md:mb-6 flex items-center gap-2">
@@ -259,7 +261,6 @@ export default function UserDashboard() {
                     </div>
                   </div>
                   
-                  {/* Residents Sheet in History */}
                   <div className="overflow-x-auto p-2 w-full">
                     <p className="text-[10px] font-black uppercase text-slate-400 px-4 pt-3 tracking-wider">Resident Sheet</p>
                     <table className="w-full text-left text-xs md:text-sm min-w-[500px]">
@@ -299,7 +300,6 @@ export default function UserDashboard() {
                     </table>
                   </div>
 
-                  {/* 🎯 NEW: Archived Month's Bazar List inside History */}
                   {h.expenses && h.expenses.length > 0 && (
                     <div className="p-4 bg-slate-50/50 border-t border-slate-100">
                       <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-wider">Archived Bazar List</p>
@@ -333,7 +333,6 @@ export default function UserDashboard() {
 
       </main>
       
-      {/* Footer */}
       <div className="mt-auto py-6 text-center border-t border-gray-200">
         <p className="text-sky-500 font-medium text-base md:text-lg">Developed By Niloy Saha</p>
         <p className="text-black text-xs md:text-sm mt-1">&copy; 2026 All rights reserved</p>
