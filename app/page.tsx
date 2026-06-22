@@ -15,7 +15,7 @@ export default function LoginPage() {
     } else if (loginType === "MEMBER" && password === "whitehouse") {
       router.push("/user-dashboard");
     } else {
-      alert("Oops! Password vul hoyeche.");
+      alert("Oops!Incorrect Password.");
     }
   };
 
