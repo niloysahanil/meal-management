@@ -4,22 +4,22 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, query } from "firebase/firestore";
 
 interface Member { id: string; name: string; regularMeals: number; guestMeals: number; deposit: number; }
-interface Expense { id: string; item: string; amount: number; }
+interface Expense { id: string; item: string; amount: number; date?: string; } // 🎯 date যোগ করা হলো
 interface ArchivedMember { name: string; deposit: number; totalMeals: number; totalCost: number; status: number | string; }
-interface MonthHistory { id: string; monthName: string; mealRate: string | number; totalExpenses: number; totalMeals: number; members: ArchivedMember[]; closedAt?: string; }
+interface MonthHistory { id: string; monthName: string; mealRate: string | number; totalExpenses: number; totalMeals: number; members: ArchivedMember[]; expenses?: Expense[]; closedAt?: string; } // 🎯 archives এ expenses ব্যাকআপ রাখার জন্য
 
 export default function UserDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [history, setHistory] = useState<MonthHistory[]>([]);
-  const [userTab, setUserTab] = useState<"live" | "history">("live");
+  const [userTab, setUserTab] = useState<"live" | "bazar" | "history">("live"); // 🎯 নতুন ট্যাব 'bazar' যোগ করা হলো
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
   // Greeting State
   const [timeGreeting, setTimeGreeting] = useState({ title: "Welcome !", subtitle: "" });
 
   useEffect(() => {
-    // Load local storage data for Live Matrix
+    // Load local storage data for Live Matrix & Bazar History
     const localMembers = localStorage.getItem("wh_members");
     const localExpenses = localStorage.getItem("wh_expenses");
     if (localMembers) setMembers(JSON.parse(localMembers));
@@ -98,9 +98,11 @@ export default function UserDashboard() {
               <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Resident Portal</p>
             </div>
           </div>
-          <div className="flex w-full sm:w-auto bg-slate-100 p-1 rounded-2xl overflow-x-auto no-scrollbar">
-            <button onClick={() => setUserTab("live")} className={`flex-1 sm:flex-none whitespace-nowrap px-4 md:px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${userTab === "live" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Live Matrix</button>
-            <button onClick={() => setUserTab("history")} className={`flex-1 sm:flex-none whitespace-nowrap px-4 md:px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${userTab === "history" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>History Vault</button>
+          {/* 🎯 ট্যাব সেকশন আপডেট করা হলো (তিনটি অপশন করার জন্য) */}
+          <div className="flex w-full sm:w-auto bg-slate-100 p-1 rounded-2xl overflow-x-auto no-scrollbar gap-1">
+            <button onClick={() => setUserTab("live")} className={`flex-1 sm:flex-none whitespace-nowrap px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${userTab === "live" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Live Matrix</button>
+            <button onClick={() => setUserTab("bazar")} className={`flex-1 sm:flex-none whitespace-nowrap px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${userTab === "bazar" ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Bazar History</button>
+            <button onClick={() => setUserTab("history")} className={`flex-1 sm:flex-none whitespace-nowrap px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${userTab === "history" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>History Vault</button>
           </div>
         </div>
       </header>
@@ -117,28 +119,24 @@ export default function UserDashboard() {
           </p>
         </div>
         
+        {/* ================= LIVE MATRIX TAB ================= */}
         {userTab === "live" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out w-full">
-            {/* GLOSSY SUMMARY CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
               <div className="bg-gradient-to-br from-emerald-400 to-teal-500 rounded-3xl p-6 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden">
-                <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                 <p className="text-[10px] uppercase font-black text-emerald-50 tracking-widest relative z-10">Total Collection</p>
                 <h3 className="text-3xl md:text-4xl font-black mt-2 relative z-10 drop-shadow-sm">৳ {tCollection}</h3>
               </div>
               <div className="bg-gradient-to-br from-rose-400 to-orange-400 rounded-3xl p-6 text-white shadow-xl shadow-rose-500/20 relative overflow-hidden">
-                <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                 <p className="text-[10px] uppercase font-black text-rose-50 tracking-widest relative z-10">Bazaar Expenses</p>
                 <h3 className="text-3xl md:text-4xl font-black mt-2 relative z-10 drop-shadow-sm">৳ {tExpenses}</h3>
               </div>
               <div className="bg-gradient-to-br from-indigo-500 to-blue-500 rounded-3xl p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
-                <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                 <p className="text-[10px] uppercase font-black text-indigo-50 tracking-widest relative z-10">Live Meal Rate</p>
                 <h3 className="text-3xl md:text-4xl font-black mt-2 relative z-10 drop-shadow-sm">৳ {mealRate}</h3>
               </div>
             </div>
 
-            {/* LIVE RESIDENT MATRIX SHEET (No settlement here) */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden w-full">
               <div className="p-4 md:p-6 bg-white border-b border-slate-50 flex justify-between items-center">
                 <h2 className="font-black text-slate-800 text-base md:text-lg">Resident Matrix Sheet</h2>
@@ -189,6 +187,48 @@ export default function UserDashboard() {
           </div>
         )}
 
+        {/* ================= 🎯 NEW BAZAR HISTORY TAB ================= */}
+        {userTab === "bazar" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out w-full">
+            <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-4 md:mb-6 flex items-center gap-2">
+              <span>🛒</span> Current Month Bazar List
+            </h2>
+            
+            {expenses.length === 0 ? (
+              <div className="bg-white p-12 text-center rounded-3xl border border-slate-100">
+                <div className="text-4xl mb-4 opacity-50">💸</div>
+                <p className="text-slate-400 font-bold text-sm">No bazar added yet for this month.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden w-full">
+                <div className="overflow-x-auto p-4 w-full">
+                  <table className="w-full text-left min-w-[400px]">
+                    <thead>
+                      <tr className="text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-100">
+                        <th className="p-3">Date</th>
+                        <th className="p-3">Bazar Item Description</th>
+                        <th className="p-3 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-xs md:text-sm font-semibold text-slate-600 divide-y divide-slate-50">
+                      {[...expenses].reverse().map((e, index) => (
+                        <tr key={e.id || index} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3 text-slate-400 font-bold whitespace-nowrap">
+                            {e.date ? new Date(e.date).toLocaleDateString('en-GB') : "Live"}
+                          </td>
+                          <td className="p-3 text-slate-800 font-bold">{e.item}</td>
+                          <td className="p-3 text-right text-rose-500 font-black">৳ {e.amount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= HISTORY VAULT TAB ================= */}
         {userTab === "history" && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out w-full">
             <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-4 md:mb-6 flex items-center gap-2">
@@ -207,7 +247,7 @@ export default function UserDashboard() {
               </div>
             ) : (
               history.map((h) => (
-                <div key={h.id} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition w-full">
+                <div key={h.id} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition w-full mb-6">
                   <div className="bg-gradient-to-r from-slate-50 to-white p-4 md:p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 md:gap-4">
                     <h3 className="text-base md:text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
                       <span className="text-indigo-400">❖</span> {h.monthName}
@@ -219,7 +259,9 @@ export default function UserDashboard() {
                     </div>
                   </div>
                   
+                  {/* Residents Sheet in History */}
                   <div className="overflow-x-auto p-2 w-full">
+                    <p className="text-[10px] font-black uppercase text-slate-400 px-4 pt-3 tracking-wider">Resident Sheet</p>
                     <table className="w-full text-left text-xs md:text-sm min-w-[500px]">
                       <thead>
                         <tr className="text-slate-400 uppercase text-[9px] md:text-[10px] font-black tracking-wider">
@@ -232,17 +274,13 @@ export default function UserDashboard() {
                       </thead>
                       <tbody className="font-semibold text-slate-600 divide-y divide-slate-50">
                         {h.members.map((mem, idx) => {
-                          // 🎯 ফিক্সড লজিক: জমা থেকে খরচ বাদ দিয়ে আসল ব্যালেন্স বের করা হচ্ছে
                           const finalBalance = mem.deposit - mem.totalCost;
-
                           return (
                             <tr key={idx} className="hover:bg-slate-50/50 transition">
                               <td className="p-3 md:p-4 font-bold text-slate-800 whitespace-nowrap">{mem.name}</td>
                               <td className="p-3 md:p-4 text-center text-emerald-500 whitespace-nowrap">৳{mem.deposit}</td>
                               <td className="p-3 md:p-4 text-center">{mem.totalMeals}</td>
                               <td className="p-3 md:p-4 text-center text-rose-400 whitespace-nowrap">৳{mem.totalCost}</td>
-                              
-                              {/* 🎯 এখানে হিস্ট্রি ট্যাবের প্লাস মাইনাস ফিক্সড অ্যামাউন্ট রেন্ডার করা হলো */}
                               <td className="p-3 md:p-4 text-right whitespace-nowrap">
                                 {finalBalance >= 0 ? (
                                   <span className="bg-emerald-100 text-emerald-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">
@@ -260,6 +298,33 @@ export default function UserDashboard() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* 🎯 NEW: Archived Month's Bazar List inside History */}
+                  {h.expenses && h.expenses.length > 0 && (
+                    <div className="p-4 bg-slate-50/50 border-t border-slate-100">
+                      <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-wider">Archived Bazar List</p>
+                      <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100 bg-white p-2">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="text-slate-400 text-[9px] uppercase font-black tracking-wider border-b border-slate-50">
+                              <th className="p-2">Date</th>
+                              <th className="p-2">Item</th>
+                              <th className="p-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 text-slate-500 font-medium">
+                            {h.expenses.map((exp, eIdx) => (
+                              <tr key={eIdx}>
+                                <td className="p-2 text-slate-400">{exp.date ? new Date(exp.date).toLocaleDateString('en-GB') : "N/A"}</td>
+                                <td className="p-2 font-bold text-slate-700">{exp.item}</td>
+                                <td className="p-2 text-right text-rose-500 font-bold">৳{exp.amount}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -270,12 +335,8 @@ export default function UserDashboard() {
       
       {/* Footer */}
       <div className="mt-auto py-6 text-center border-t border-gray-200">
-        <p className="text-sky-500 font-medium text-base md:text-lg">
-          Developed By Niloy Saha
-        </p>
-        <p className="text-black text-xs md:text-sm mt-1">
-          &copy; 2026 All rights reserved
-        </p>
+        <p className="text-sky-500 font-medium text-base md:text-lg">Developed By Niloy Saha</p>
+        <p className="text-black text-xs md:text-sm mt-1">&copy; 2026 All rights reserved</p>
       </div>
     </div>
   );
