@@ -1,8 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-// ফায়ারবেস ইমপোর্ট (তোমার firebase.js ফাইলের লোকেশন অনুযায়ী পাথ মিলিয়ে নিও)
 import { db } from "@/lib/firebase"; 
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, query } from "firebase/firestore";
 
 interface Member { id: string; name: string; regularMeals: number; guestMeals: number; deposit: number; }
 interface Expense { id: string; item: string; amount: number; }
@@ -51,13 +50,12 @@ export default function UserDashboard() {
     }
   }, []);
 
-  // ফায়ারবেস থেকে হিস্ট্রি আনার ফাংশন
+  // ফায়ারবেস থেকে হিস্ট্রি আনার ফাংশন
   useEffect(() => {
     if (userTab === "history") {
       const fetchHistory = async () => {
         setIsLoadingHistory(true);
         try {
-          // archives কালেকশন থেকে ডাটা আনছি (যেটা অ্যাডমিন প্যানেল থেকে সেভ করা হয়েছিল)
           const q = query(collection(db, "archives"));
           const querySnapshot = await getDocs(q);
           const fetchedData: MonthHistory[] = [];
@@ -65,7 +63,6 @@ export default function UserDashboard() {
             fetchedData.push({ id: doc.id, ...doc.data() } as MonthHistory);
           });
           
-          // নতুন হিস্ট্রিগুলো উপরে দেখানোর জন্য সর্ট করা
           fetchedData.sort((a, b) => {
             if(a.closedAt && b.closedAt) return new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime();
             return 0;
@@ -91,7 +88,7 @@ export default function UserDashboard() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col text-slate-800 font-sans selection:bg-emerald-200">
       
-      {/* BEAUTIFUL HEADER BANNER - Mobile Friendly */}
+      {/* BEAUTIFUL HEADER BANNER */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
@@ -122,7 +119,7 @@ export default function UserDashboard() {
         
         {userTab === "live" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out w-full">
-            {/* GLOSSY SUMMARY CARDS - Mobile Friendly Grid */}
+            {/* GLOSSY SUMMARY CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
               <div className="bg-gradient-to-br from-emerald-400 to-teal-500 rounded-3xl p-6 text-white shadow-xl shadow-emerald-500/20 relative overflow-hidden">
                 <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
@@ -141,7 +138,7 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            {/* HEART-TOUCHING TABLE DESIGN - Mobile Friendly Scroll */}
+            {/* LIVE RESIDENT MATRIX SHEET (No settlement here) */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden w-full">
               <div className="p-4 md:p-6 bg-white border-b border-slate-50 flex justify-between items-center">
                 <h2 className="font-black text-slate-800 text-base md:text-lg">Resident Matrix Sheet</h2>
@@ -234,28 +231,32 @@ export default function UserDashboard() {
                         </tr>
                       </thead>
                       <tbody className="font-semibold text-slate-600 divide-y divide-slate-50">
-                        {h.members.map((mem, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/50 transition">
-                            <td className="p-3 md:p-4 font-bold text-slate-800 whitespace-nowrap">{mem.name}</td>
-                            <td className="p-3 md:p-4 text-center text-emerald-500 whitespace-nowrap">৳{mem.deposit}</td>
-                            <td className="p-3 md:p-4 text-center">{mem.totalMeals}</td>
-                            <td className="p-3 md:p-4 text-center text-rose-400 whitespace-nowrap">৳{mem.totalCost}</td>
-                            <td className="p-3 md:p-4 text-right whitespace-nowrap">
-                              {/* অ্যাডমিন প্যানেল থেকে আমরা status ফিল্ডে ডাইরেক্ট String ("ফেরত পাবে (+)") পাঠিয়েছিলাম, তাই এখানে চেক করে রেন্ডার করছি */}
-                              {typeof mem.status === 'number' ? (
-                                mem.status >= 0 ? (
-                                  <span className="bg-emerald-100 text-emerald-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">+ ৳{mem.status}</span>
+                        {h.members.map((mem, idx) => {
+                          // 🎯 ফিক্সড লজিক: জমা থেকে খরচ বাদ দিয়ে আসল ব্যালেন্স বের করা হচ্ছে
+                          const finalBalance = mem.deposit - mem.totalCost;
+
+                          return (
+                            <tr key={idx} className="hover:bg-slate-50/50 transition">
+                              <td className="p-3 md:p-4 font-bold text-slate-800 whitespace-nowrap">{mem.name}</td>
+                              <td className="p-3 md:p-4 text-center text-emerald-500 whitespace-nowrap">৳{mem.deposit}</td>
+                              <td className="p-3 md:p-4 text-center">{mem.totalMeals}</td>
+                              <td className="p-3 md:p-4 text-center text-rose-400 whitespace-nowrap">৳{mem.totalCost}</td>
+                              
+                              {/* 🎯 এখানে হিস্ট্রি ট্যাবের প্লাস মাইনাস ফিক্সড অ্যামাউন্ট রেন্ডার করা হলো */}
+                              <td className="p-3 md:p-4 text-right whitespace-nowrap">
+                                {finalBalance >= 0 ? (
+                                  <span className="bg-emerald-100 text-emerald-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">
+                                    ফেরত পাবে (+৳{finalBalance.toFixed(2)})
+                                  </span>
                                 ) : (
-                                  <span className="bg-rose-100 text-rose-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">- ৳{Math.abs(mem.status)}</span>
-                                )
-                              ) : (
-                                <span className={`px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black ${mem.status.toString().includes('+') ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                  {mem.status}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                                  <span className="bg-rose-100 text-rose-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">
+                                    দেবে (-৳{Math.abs(finalBalance).toFixed(2)})
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -267,7 +268,7 @@ export default function UserDashboard() {
 
       </main>
       
-      {/* Footer / Greetings Box */}
+      {/* Footer */}
       <div className="mt-auto py-6 text-center border-t border-gray-200">
         <p className="text-sky-500 font-medium text-base md:text-lg">
           Developed By Niloy Saha
