@@ -1,11 +1,10 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-// ফায়ারবেস ইমপোর্ট (তোমার firebase.js ফাইলের লোকেশন অনুযায়ী পাথ মিলিয়ে নিও। সাধারণত '@/lib/firebase' বা '../lib/firebase' হয়)
 import { db } from "@/lib/firebase"; 
-import { collection, addDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 interface Member { id: string; name: string; regularMeals: number; regularMealsUpdatedAt?: string; guestMeals: number; guestMealsUpdatedAt?: string; deposit: number; }
-interface Expense { id: string; item: string; amount: number; }
+interface Expense { id: string; item: string; amount: number; date?: string; }
 
 export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -20,47 +19,43 @@ export default function AdminDashboard() {
   const [expenseAmount, setExpenseAmount] = useState("");
   const [inputMeals, setInputMeals] = useState<{ [key: string]: { reg: string; gst: string } }>({});
   
-  // ফায়ারবেসে সেভ করার সময় লোডিং দেখানোর জন্য
   const [isClosing, setIsClosing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // লাইভ ডাটা লোড হওয়ার জন্য
 
+  // 🎯 ১. পেজ লোডের সময় ফায়ারবেস থেকে লাইভ ডাটা টানা
   useEffect(() => {
-    // বর্তমান মাস অটোমেটিক ইনপুট বক্সে বসিয়ে দেওয়ার লজিক
     const currentDate = new Date();
     const currentMonthStr = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
     setMonthName(currentMonthStr);
 
-    const localMembers = localStorage.getItem("wh_members");
-    const localExpenses = localStorage.getItem("wh_expenses");
-    const lastResetDate = localStorage.getItem("wh_last_reset_date");
+    const fetchLiveFirebaseData = async () => {
+      try {
+        const memSnapshot = await getDocs(collection(db, "members"));
+        const loadedMembers: Member[] = [];
+        memSnapshot.forEach(doc => loadedMembers.push({ id: doc.id, ...doc.data() } as Member));
 
-    let loadedMembers: Member[] = localMembers ? JSON.parse(localMembers) : [];
-    const todayStr = new Date().toISOString().split('T')[0];
+        const expSnapshot = await getDocs(collection(db, "expenses"));
+        const loadedExpenses: Expense[] = [];
+        expSnapshot.forEach(doc => loadedExpenses.push({ id: doc.id, ...doc.data() } as Expense));
+        setMembers(loadedMembers);
+        setExpenses(loadedExpenses);
 
-    if (lastResetDate !== todayStr && loadedMembers.length > 0) {
-      loadedMembers = loadedMembers.map(m => ({
-        ...m,
-        regularMeals: 0,
-        guestMeals: 0,
-        regularMealsUpdatedAt: undefined,
-        guestMealsUpdatedAt: undefined
-      }));
-      localStorage.setItem("wh_members", JSON.stringify(loadedMembers));
-      localStorage.setItem("wh_last_reset_date", todayStr);
-    }
+        const initialInputs: typeof inputMeals = {};
+        loadedMembers.forEach(m => { initialInputs[m.id] = { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() }; });
+        setInputMeals(initialInputs);
+      } catch (err) {
+        console.error("Firebase Load Error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    setMembers(loadedMembers);
-    if (!localMembers) localStorage.setItem("wh_members", JSON.stringify(loadedMembers));
-
-    const initialInputs: typeof inputMeals = {};
-    loadedMembers.forEach(m => { initialInputs[m.id] = { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() }; });
-    setInputMeals(initialInputs);
-    
-    if (localExpenses) setExpenses(JSON.parse(localExpenses));
+    fetchLiveFirebaseData();
   }, []);
 
-  const saveMembers = (updated: Member[]) => {
+  // UI আপডেট করার হেল্পার
+  const updateUIAndInputs = (updated: Member[]) => {
     setMembers(updated);
-    localStorage.setItem("wh_members", JSON.stringify(updated));
     const updatedInputs = { ...inputMeals };
     updated.forEach(m => { updatedInputs[m.id] = { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() }; });
     setInputMeals(updatedInputs);
@@ -79,8 +74,11 @@ export default function AdminDashboard() {
     setInputMeals({ ...inputMeals, [mId]: { ...current, [type]: val } });
   };
 
-  const handleBulkSaveMeals = (e: React.FormEvent) => {
+  // 🎯 ২. একসাথে সব মিল ফায়ারবেসে সেভ করা
+  const handleBulkSaveMeals = async (e: React.FormEvent) => {
     e.preventDefault();
+    const batch = writeBatch(db); // ফায়ারবেসের ব্যাচ রাইট
+
     const updated = members.map(m => {
       const inputs = inputMeals[m.id] || { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() };
       const newReg = parseFloat(inputs.reg) || 0;
@@ -93,35 +91,82 @@ export default function AdminDashboard() {
       if (regTime.allowed && newReg !== m.regularMeals) { finalReg = newReg; regTimeText = new Date().toISOString(); }
       if (gstTime.allowed && newGst !== m.guestMeals) { finalGst = newGst; gstTimeText = new Date().toISOString(); }
 
-      return { ...m, regularMeals: finalReg, regularMealsUpdatedAt: regTimeText, guestMeals: finalGst, guestMealsUpdatedAt: gstTimeText };
+      const updatedMem = { ...m, regularMeals: finalReg, regularMealsUpdatedAt: regTimeText, guestMeals: finalGst, guestMealsUpdatedAt: gstTimeText };
+      batch.set(doc(db, "members", m.id), updatedMem); // ব্যাচে যোগ করা
+      return updatedMem;
     });
-    saveMembers(updated);
-    alert("✨ Meals updated smoothly!");
+
+    try {
+      await batch.commit(); // এক ধাক্কায় ফায়ারবেসে সব আপডেট!
+      updateUIAndInputs(updated);
+      alert("✨ Meals live synced to Firebase!");
+    } catch (err) {
+      alert("Error saving meals!");
+      console.error(err);
+    }
   };
 
-  const handleAddMember = (e: React.FormEvent) => {
+  // 🎯 ৩. নতুন মেম্বার সরাসরি ফায়ারবেসে
+  const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemberName.trim()) return;
-    saveMembers([...members, { id: Date.now().toString(), name: newMemberName, regularMeals: 0, guestMeals: 0, deposit: 0 }]);
-    setNewMemberName(""); alert("Member Added!");
+    
+    const newMember: Member = { id: Date.now().toString(), name: newMemberName, regularMeals: 0, guestMeals: 0, deposit: 0 };
+    try {
+      await setDoc(doc(db, "members", newMember.id), newMember);
+      updateUIAndInputs([...members, newMember]);
+      setNewMemberName(""); 
+      alert("Member Added to Firebase!");
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleAddMoney = (e: React.FormEvent) => {
+  // 🎯 ৪. মেম্বার ডিলিট
+  const handleRemoveMember = async (id: string) => {
+    if(confirm("Remove member?")) {
+      await deleteDoc(doc(db, "members", id));
+      updateUIAndInputs(members.filter(mem => mem.id !== id));
+    }
+  };
+
+  // 🎯 ৫. ডিপোজিট ফায়ারবেসে
+  const handleAddMoney = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMemberId || !addMoneyAmount) return;
-    saveMembers(members.map(m => m.id === selectedMemberId ? { ...m, deposit: m.deposit + parseFloat(addMoneyAmount) } : m));
-    setAddMoneyAmount(""); alert("Deposit Added!");
+    
+    const targetMember = members.find(m => m.id === selectedMemberId);
+    if(targetMember) {
+      const newDeposit = targetMember.deposit + parseFloat(addMoneyAmount);
+      try {
+        await updateDoc(doc(db, "members", selectedMemberId), { deposit: newDeposit });
+        updateUIAndInputs(members.map(m => m.id === selectedMemberId ? { ...m, deposit: newDeposit } : m));
+        setAddMoneyAmount(""); 
+        alert("Deposit synced to Firebase!");
+      } catch (err) {
+        console.error(err);
+      }
+    }
   };
 
-  const handleAddExpense = (e: React.FormEvent) => {
+  // 🎯 ৬. বাজার খরচ ফায়ারবেসে
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expenseItem || !expenseAmount) return;
-    const updatedExp = [...expenses, { id: Date.now().toString(), item: expenseItem, amount: parseFloat(expenseAmount) }];
-    setExpenses(updatedExp); localStorage.setItem("wh_expenses", JSON.stringify(updatedExp));
-    setExpenseItem(""); setExpenseAmount(""); alert("Expense Logged!");
+    
+    const newExpense: Expense = { id: Date.now().toString(), item: expenseItem, amount: parseFloat(expenseAmount), date: new Date().toISOString() };
+    try {
+      await setDoc(doc(db, "expenses", newExpense.id), newExpense);
+      setExpenses([...expenses, newExpense]);
+      setExpenseItem(""); 
+      setExpenseAmount(""); 
+      alert("Expense synced to Firebase!");
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // 🔥 মাসের হিসাব ফায়ারবেসে ক্লোজ করার আসল ম্যাজিক
+  // 🎯 ৭. মাস ক্লোজ করা
   const handleCloseMonth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!monthName.trim()) return alert("Enter month name!");
@@ -142,7 +187,6 @@ export default function AdminDashboard() {
         deposit: m.deposit, 
         totalMeals: mMeals, 
         totalCost: parseFloat(totalCost.toFixed(2)), 
-        // প্লাস হলে মেস থেকে টাকা পাবে, মাইনাস হলে মেসকে দিবে
         balance: parseFloat(Math.abs(balance).toFixed(2)),
         status: balance >= 0 ? "ফেরত পাবে (+)" : "মেসকে দিবে (-)" 
       };
@@ -154,28 +198,43 @@ export default function AdminDashboard() {
       totalExpenses: tExp, 
       totalMeals: tMeals, 
       members: archivedMembers,
+      expenses: expenses,
       closedAt: new Date().toISOString()
     };
 
     try {
-      // ডাটাবেসে সেভ করা হচ্ছে
-      await addDoc(collection(db, "archives"), historyData);
+      // ১. আর্কাইভে পাঠানো
+      await setDoc(doc(db, "archives", Date.now().toString()), historyData);
 
-      // লোকাল স্টোরেজ ও স্টেট জিরো (Reset) করে দেওয়া হচ্ছে
-      saveMembers(members.map(m => ({ ...m, regularMeals: 0, guestMeals: 0, deposit: 0, regularMealsUpdatedAt: undefined, guestMealsUpdatedAt: undefined })));
+      // ২. ব্যাচ আপডেট: মেম্বারদের মিল জিরো করা এবং ব্যালেন্স ক্যারি করা
+      const batch = writeBatch(db);
+      const resetMembers = members.map(m => {
+        const mMeals = m.regularMeals + m.guestMeals;
+        const totalCost = mMeals * mRate;
+        const finalBalance = m.deposit - totalCost; 
+        
+        const resetM = { ...m, regularMeals: 0, guestMeals: 0, deposit: parseFloat(finalBalance.toFixed(2)), regularMealsUpdatedAt: "", guestMealsUpdatedAt: "" };
+        batch.set(doc(db, "members", m.id), resetM);
+        return resetM;
+      });
+
+      // ৩. রানিং বাজার ডিলিট
+      expenses.forEach(e => batch.delete(doc(db, "expenses", e.id)));
+
+      await batch.commit();
+
+      updateUIAndInputs(resetMembers);
       setExpenses([]); 
-      localStorage.removeItem("wh_expenses");
       
-      alert(`🎉 ${monthName}-এর হিসাব সফলভাবে ফায়ারবেসে সেভ হয়েছে!`);
+      alert(`🎉 ${monthName}-এর হিসাব সফলভাবে ফায়ারবেসে সেভ হয়েছে!`);
       
-      // আগামী মাসের জন্য মাসের নাম আবার অটো-আপডেট করে দেওয়া
       const nextMonthDate = new Date();
       nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
       setMonthName(nextMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' }));
 
     } catch (error) {
       console.error("Firebase Error: ", error);
-      alert("ফায়ারবেসে ডাটা সেভ করতে সমস্যা হয়েছে। কনসোলে এরর চেক করো।");
+      alert("ফায়ারবেসে ডাটা সেভ করতে সমস্যা হয়েছে।");
     } finally {
       setIsClosing(false);
     }
@@ -185,6 +244,8 @@ export default function AdminDashboard() {
   const tExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const tMeals = members.reduce((sum, m) => sum + m.regularMeals + m.guestMeals, 0);
   const liveRate = tMeals > 0 ? (tExpenses / tMeals).toFixed(2) : "0.00";
+
+  if (isLoading) return <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center font-bold animate-pulse text-indigo-500">Live Syncing from Firebase...</div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row text-slate-800 font-sans selection:bg-indigo-200">
@@ -198,7 +259,6 @@ export default function AdminDashboard() {
           <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest mt-2 opacity-80">Admin Space ✦</p>
         </div>
         
-        {/* মোবাইলের জন্য Horizontal Scroll, ডেস্কটপে Vertical */}
         <nav className="flex flex-row md:flex-col overflow-x-auto md:overflow-visible p-3 md:p-5 gap-2 md:gap-0 md:space-y-2 no-scrollbar">
           {[
             { id: "meals", icon: "🍽️", label: "Meal Management" },
@@ -263,9 +323,7 @@ export default function AdminDashboard() {
                           <span className="font-bold text-base text-slate-800 break-words">{m.name}</span>
                         </div>
 
-                        {/* ইনপুট ফিল্ডগুলো মোবাইলে র‍্যাপ হয়ে যাবে */}
                         <div className="flex flex-wrap items-center gap-3 md:gap-6 xl:justify-end">
-                          
                           <div className="flex flex-col gap-1.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-100 flex-1 min-w-[200px]">
                             <div className="flex justify-between items-center px-1">
                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Regular</span>
@@ -299,7 +357,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="pt-6 border-t border-slate-100 md:text-right mt-4">
                   <button type="submit" className="w-full md:w-auto bg-indigo-600 text-white font-bold text-sm px-8 py-3.5 rounded-2xl shadow-lg shadow-indigo-600/30 hover:bg-indigo-700 hover:shadow-indigo-600/40 transition-all duration-300 transform hover:-translate-y-0.5">
-                    💾 Save Meal Configuration
+                    💾 Save Meal to Firebase
                   </button>
                 </div>
               </form>
@@ -354,7 +412,7 @@ export default function AdminDashboard() {
                 {members.map(m => (
                   <div key={m.id} className="p-4 border border-slate-100 rounded-2xl bg-slate-50 flex items-center justify-between hover:bg-slate-100 transition">
                     <span className="font-bold text-slate-700 break-all mr-2">{m.name}</span>
-                    <button onClick={() => { if(confirm("Remove member?")) saveMembers(members.filter(mem => mem.id !== m.id)) }} className="w-8 h-8 shrink-0 rounded-full bg-white text-rose-500 font-bold shadow-sm flex items-center justify-center hover:bg-rose-500 hover:text-white transition">×</button>
+                    <button onClick={() => handleRemoveMember(m.id)} className="w-8 h-8 shrink-0 rounded-full bg-white text-rose-500 font-bold shadow-sm flex items-center justify-center hover:bg-rose-500 hover:text-white transition">×</button>
                   </div>
                 ))}
               </div>
