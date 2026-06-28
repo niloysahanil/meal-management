@@ -14,29 +14,28 @@ export default function UserDashboard() {
   const [history, setHistory] = useState<MonthHistory[]>([]);
   const [userTab, setUserTab] = useState<"live" | "bazar" | "history">("live");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  
-  const [timeGreeting, setTimeGreeting] = useState({ title: "Welcome !", subtitle: "" });
+  const [timeGreeting, setTimeGreeting] = useState({ title: "Welcome!", subtitle: "" });
 
   useEffect(() => {
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) {
       setTimeGreeting({ 
-        title: "Good Morning !", 
+        title: "Good Morning!", 
         subtitle: "A great day begins with a positive mindset and a good meal. Have a wonderful morning!" 
       });
     } else if (hour >= 12 && hour < 17) {
       setTimeGreeting({ 
-        title: "Good Afternoon !", 
+        title: "Good Afternoon!", 
         subtitle: "Halfway through the day! Take a deep breath, stay energized, and keep the momentum going." 
       });
     } else if (hour >= 17 && hour < 20) {
       setTimeGreeting({ 
-        title: "Good Evening !", 
+        title: "Good Evening!", 
         subtitle: "The day's hustle is over. Time to unwind, relax, and share some good moments." 
       });
     } else {
       setTimeGreeting({ 
-        title: "Good Night !", 
+        title: "Good Night!", 
         subtitle: "Time to rest and recharge. Wishing you a peaceful night and a fresh start tomorrow." 
       });
     }
@@ -95,7 +94,6 @@ export default function UserDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col text-slate-800 font-sans selection:bg-emerald-200">
-      
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-5 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
@@ -114,7 +112,6 @@ export default function UserDashboard() {
       </header>
 
       <main className="flex-1 p-4 md:p-10 max-w-6xl mx-auto w-full overflow-hidden">
-        
         <div className="bg-[#F0F4F8] rounded-3xl p-5 md:p-6 mb-6 md:mb-8 shadow-sm border border-white">
           <h2 className="text-[#4A85F6] text-lg md:text-xl font-black tracking-wide mb-1.5">
             {timeGreeting.title}
@@ -132,7 +129,7 @@ export default function UserDashboard() {
                 <h3 className="text-3xl md:text-4xl font-black mt-2 relative z-10 drop-shadow-sm">৳ {tCollection}</h3>
               </div>
               <div className="bg-gradient-to-br from-rose-400 to-orange-400 rounded-3xl p-6 text-white shadow-xl shadow-rose-500/20 relative overflow-hidden">
-                <p className="text-[10px] uppercase font-black text-rose-50 tracking-widest relative z-10">Bazaar Expenses</p>
+                <p className="text-[10px] uppercase font-black text-rose-50 tracking-widest relative z-10">Bazar Expenses</p>
                 <h3 className="text-3xl md:text-4xl font-black mt-2 relative z-10 drop-shadow-sm">৳ {tExpenses}</h3>
               </div>
               <div className="bg-gradient-to-br from-indigo-500 to-blue-500 rounded-3xl p-6 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden">
@@ -187,6 +184,12 @@ export default function UserDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            <div className="mt-8 bg-white border border-slate-100 rounded-2xl p-4 text-center max-w-sm mx-auto shadow-sm">
+              <p className="font-bold text-slate-700 text-xs md:text-sm">Developed By Niloy Saha</p>
+              <p className="text-sky-500 font-medium text-[11px] mt-0.5">Contact: niloysaha5522@gmail.com</p>
+              <p className="text-slate-400 text-[10px] mt-1">&copy; 2026 All rights reserved</p>
             </div>
           </div>
         )}
@@ -267,7 +270,7 @@ export default function UserDashboard() {
                       <thead>
                         <tr className="text-slate-400 uppercase text-[9px] md:text-[10px] font-black tracking-wider">
                           <th className="p-3 md:p-4 whitespace-nowrap">Resident</th>
-                          <th className="p-3 md:p-4 text-center whitespace-nowrap">Given</th>
+                          <th className="p-3 md:p-4 text-center whitespace-nowrap">Deposit</th>
                           <th className="p-3 md:p-4 text-center whitespace-nowrap">Meals</th>
                           <th className="p-3 md:p-4 text-center whitespace-nowrap">Cost</th>
                           <th className="p-3 md:p-4 text-right whitespace-nowrap">Settlement</th>
@@ -285,11 +288,11 @@ export default function UserDashboard() {
                               <td className="p-3 md:p-4 text-right whitespace-nowrap">
                                 {finalBalance >= 0 ? (
                                   <span className="bg-emerald-100 text-emerald-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">
-                                    ফেরত পাবে (+৳{finalBalance.toFixed(2)})
+                                    Refund (+৳{finalBalance.toFixed(2)})
                                   </span>
                                 ) : (
                                   <span className="bg-rose-100 text-rose-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">
-                                    দেবে (-৳{Math.abs(finalBalance).toFixed(2)})
+                                    Due (-৳{Math.abs(finalBalance).toFixed(2)})
                                   </span>
                                 )}
                               </td>
@@ -330,13 +333,7 @@ export default function UserDashboard() {
             )}
           </div>
         )}
-
       </main>
-      
-      <div className="mt-auto py-6 text-center border-t border-gray-200">
-        <p className="text-sky-500 font-medium text-base md:text-lg">Developed By Niloy Saha</p>
-        <p className="text-black text-xs md:text-sm mt-1">&copy; 2026 All rights reserved</p>
-      </div>
     </div>
   );
 }
