@@ -20,9 +20,8 @@ export default function AdminDashboard() {
   const [inputMeals, setInputMeals] = useState<{ [key: string]: { reg: string; gst: string } }>({});
   
   const [isClosing, setIsClosing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // লাইভ ডাটা লোড হওয়ার জন্য
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 🎯 ১. পেজ লোডের সময় ফায়ারবেস থেকে লাইভ ডাটা টানা
   useEffect(() => {
     const currentDate = new Date();
     const currentMonthStr = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -53,7 +52,6 @@ export default function AdminDashboard() {
     fetchLiveFirebaseData();
   }, []);
 
-  // UI আপডেট করার হেল্পার
   const updateUIAndInputs = (updated: Member[]) => {
     setMembers(updated);
     const updatedInputs = { ...inputMeals };
@@ -63,7 +61,19 @@ export default function AdminDashboard() {
 
   const checkTimeLimit = (updatedAt: string | undefined, limitHours: number) => {
     if (!updatedAt) return { allowed: true, text: "Ready" };
-    const diffHours = (Date.now() - new Date(updatedAt).getTime()) / (1000 * 60 * 60);
+    
+    const lastUpdate = new Date(updatedAt);
+    const now = new Date();
+    
+    if (
+      lastUpdate.getDate() !== now.getDate() || 
+      lastUpdate.getMonth() !== now.getMonth() || 
+      lastUpdate.getFullYear() !== now.getFullYear()
+    ) {
+      return { allowed: true, text: "Ready" };
+    }
+
+    const diffHours = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
     const remaining = limitHours - diffHours;
     if (remaining <= 0) return { allowed: false, text: "🔒 Locked" };
     return { allowed: true, text: `⏱️ ${remaining.toFixed(1)}h` };
@@ -74,17 +84,18 @@ export default function AdminDashboard() {
     setInputMeals({ ...inputMeals, [mId]: { ...current, [type]: val } });
   };
 
-  // 🎯 ২. একসাথে সব মিল ফায়ারবেসে সেভ করা
   const handleBulkSaveMeals = async (e: React.FormEvent) => {
     e.preventDefault();
-    const batch = writeBatch(db); // ফায়ারবেসের ব্যাচ রাইট
+    const batch = writeBatch(db);
 
     const updated = members.map(m => {
       const inputs = inputMeals[m.id] || { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() };
       const newReg = parseFloat(inputs.reg) || 0;
       const newGst = parseFloat(inputs.gst) || 0;
-      const regTime = checkTimeLimit(m.regularMealsUpdatedAt, 6);
-      const gstTime = checkTimeLimit(m.guestMealsUpdatedAt, 12);
+      
+      const regTime = checkTimeLimit(m.regularMealsUpdatedAt, 3);
+      const gstTime = checkTimeLimit(m.guestMealsUpdatedAt, 3);
+      
       let finalReg = m.regularMeals, regTimeText = m.regularMealsUpdatedAt;
       let finalGst = m.guestMeals, gstTimeText = m.guestMealsUpdatedAt;
 
@@ -92,12 +103,12 @@ export default function AdminDashboard() {
       if (gstTime.allowed && newGst !== m.guestMeals) { finalGst = newGst; gstTimeText = new Date().toISOString(); }
 
       const updatedMem = { ...m, regularMeals: finalReg, regularMealsUpdatedAt: regTimeText, guestMeals: finalGst, guestMealsUpdatedAt: gstTimeText };
-      batch.set(doc(db, "members", m.id), updatedMem); // ব্যাচে যোগ করা
+      batch.set(doc(db, "members", m.id), updatedMem);
       return updatedMem;
     });
 
     try {
-      await batch.commit(); // এক ধাক্কায় ফায়ারবেসে সব আপডেট!
+      await batch.commit();
       updateUIAndInputs(updated);
       alert("✨ Meals live synced to Firebase!");
     } catch (err) {
@@ -106,7 +117,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🎯 ৩. নতুন মেম্বার সরাসরি ফায়ারবেসে
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemberName.trim()) return;
@@ -122,7 +132,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🎯 ৪. মেম্বার ডিলিট
   const handleRemoveMember = async (id: string) => {
     if(confirm("Remove member?")) {
       await deleteDoc(doc(db, "members", id));
@@ -130,7 +139,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🎯 ৫. ডিপোজিট ফায়ারবেসে
   const handleAddMoney = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMemberId || !addMoneyAmount) return;
@@ -149,7 +157,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🎯 ৬. বাজার খরচ ফায়ারবেসে
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expenseItem || !expenseAmount) return;
@@ -166,7 +173,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🎯 ৭. মাস ক্লোজ করা
   const handleCloseMonth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!monthName.trim()) return alert("Enter month name!");
@@ -203,10 +209,8 @@ export default function AdminDashboard() {
     };
 
     try {
-      // ১. আর্কাইভে পাঠানো
       await setDoc(doc(db, "archives", Date.now().toString()), historyData);
 
-      // ২. ব্যাচ আপডেট: মেম্বারদের মিল জিরো করা এবং ব্যালেন্স ক্যারি করা
       const batch = writeBatch(db);
       const resetMembers = members.map(m => {
         const mMeals = m.regularMeals + m.guestMeals;
@@ -218,7 +222,6 @@ export default function AdminDashboard() {
         return resetM;
       });
 
-      // ৩. রানিং বাজার ডিলিট
       expenses.forEach(e => batch.delete(doc(db, "expenses", e.id)));
 
       await batch.commit();
@@ -250,7 +253,6 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row text-slate-800 font-sans selection:bg-indigo-200">
       
-      {/* 📱 রেসপন্সিভ সাইডবার / নেভিগেশন */}
       <aside className="w-full md:w-72 bg-gradient-to-b from-indigo-900 to-slate-900 text-white flex flex-col shadow-2xl z-10 shrink-0">
         <div className="p-6 md:p-8 border-b border-white/10 text-center md:text-left">
           <h1 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-white">
@@ -280,7 +282,6 @@ export default function AdminDashboard() {
 
       <main className="flex-1 p-4 md:p-10 max-w-6xl mx-auto flex flex-col gap-6 w-full overflow-hidden">
         
-        {/* স্ট্যাট কার্ডগুলো */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-5">
           <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition">
             <div className="absolute -right-6 -top-6 w-24 h-24 bg-emerald-50 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
@@ -310,8 +311,8 @@ export default function AdminDashboard() {
               <form onSubmit={handleBulkSaveMeals} className="space-y-4">
                 <div className="divide-y divide-slate-50">
                   {members.map(m => {
-                    const regTime = checkTimeLimit(m.regularMealsUpdatedAt, 6);
-                    const gstTime = checkTimeLimit(m.guestMealsUpdatedAt, 12);
+                    const regTime = checkTimeLimit(m.regularMealsUpdatedAt, 3);
+                    const gstTime = checkTimeLimit(m.guestMealsUpdatedAt, 3);
                     const currentInputs = inputMeals[m.id] || { reg: "0", gst: "0" };
 
                     return (
