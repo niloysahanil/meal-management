@@ -186,10 +186,14 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            <div className="mt-8 bg-white border border-slate-100 rounded-2xl p-4 text-center max-w-sm mx-auto shadow-sm">
-              <p className="font-bold text-slate-700 text-xs md:text-sm">Developed By Niloy Saha</p>
-              <p className="text-sky-500 font-medium text-[11px] mt-0.5">Contact: niloysaha5522@gmail.com</p>
-              <p className="text-slate-400 text-[10px] mt-1">&copy; 2026 All rights reserved</p>
+            <div className="mt-8 bg-white border border-slate-100 rounded-2xl p-5 md:p-6 text-center max-w-md mx-auto shadow-sm">
+              <h3 className="font-bold text-slate-700 text-xs md:text-sm uppercase tracking-wider">Contact Us</h3>
+              <div className="w-full h-[1px] bg-slate-100 my-3"></div>
+              <div className="space-y-1 text-xs md:text-sm text-slate-600">
+                <p><span className="font-bold text-slate-800">Developed By:</span> Niloy Saha</p>
+                <p><span className="font-bold text-slate-800">Email:</span> niloysaha5522@gmail.com</p>
+                <p className="text-slate-400 text-[10px] md:text-xs pt-2">&copy; 2026 All rights reserved</p>
+              </div>
             </div>
           </div>
         )}
