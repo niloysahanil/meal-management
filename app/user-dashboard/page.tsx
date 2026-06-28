@@ -16,30 +16,20 @@ export default function UserDashboard() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [timeGreeting, setTimeGreeting] = useState({ title: "Welcome!", subtitle: "" });
 
+  // টাইম ভিত্তিক গ্রিটিং লজিক
   useEffect(() => {
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) {
-      setTimeGreeting({ 
-        title: "Good Morning!", 
-        subtitle: "A great day begins with a positive mindset and a good meal. Have a wonderful morning!" 
-      });
+      setTimeGreeting({ title: "Good Morning!", subtitle: "A great day begins with a positive mindset and a good meal. Have a wonderful morning!" });
     } else if (hour >= 12 && hour < 17) {
-      setTimeGreeting({ 
-        title: "Good Afternoon!", 
-        subtitle: "Halfway through the day! Take a deep breath, stay energized, and keep the momentum going." 
-      });
+      setTimeGreeting({ title: "Good Afternoon!", subtitle: "Halfway through the day! Take a deep breath, stay energized, and keep the momentum going." });
     } else if (hour >= 17 && hour < 20) {
-      setTimeGreeting({ 
-        title: "Good Evening!", 
-        subtitle: "The day's hustle is over. Time to unwind, relax, and share some good moments." 
-      });
+      setTimeGreeting({ title: "Good Evening!", subtitle: "The day's hustle is over. Time to unwind, relax, and share some good moments." });
     } else {
-      setTimeGreeting({ 
-        title: "Good Night!", 
-        subtitle: "Time to rest and recharge. Wishing you a peaceful night and a fresh start tomorrow." 
-      });
+      setTimeGreeting({ title: "Good Night!", subtitle: "Time to rest and recharge. Wishing you a peaceful night and a fresh start tomorrow." });
     }
 
+    // ফায়ারবেস লাইভ লিসেনার
     const unsubscribeMembers = onSnapshot(collection(db, "members"), (snapshot) => {
       const liveMembers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
       setMembers(liveMembers);
@@ -58,6 +48,7 @@ export default function UserDashboard() {
     };
   }, []);
 
+  // হিস্ট্রি ফেচ লজিক
   useEffect(() => {
     if (userTab === "history") {
       const fetchHistory = async () => {
@@ -77,7 +68,7 @@ export default function UserDashboard() {
 
           setHistory(fetchedData);
         } catch (error) {
-          console.error(error);
+          console.error("Error fetching history:", error);
         } finally {
           setIsLoadingHistory(false);
         }
@@ -87,6 +78,7 @@ export default function UserDashboard() {
     }
   }, [userTab]);
 
+  // ক্যালকুলেশন লজিক
   const tCollection = members.reduce((sum, m) => sum + m.deposit, 0);
   const tExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const tMeals = members.reduce((sum, m) => sum + m.regularMeals + m.guestMeals, 0);
@@ -186,15 +178,37 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            <div className="mt-8 bg-white border border-slate-100 rounded-2xl p-5 md:p-6 text-center max-w-md mx-auto shadow-sm">
-              <h3 className="font-bold text-slate-700 text-xs md:text-sm uppercase tracking-wider">Contact Us</h3>
-              <div className="w-full h-[1px] bg-slate-100 my-3"></div>
-              <div className="space-y-1 text-xs md:text-sm text-slate-600">
-                <p><span className="font-bold text-slate-800">Developed By:</span> Niloy Saha</p>
-                <p><span className="font-bold text-slate-800">Email:</span> niloysaha5522@gmail.com</p>
-                <p className="text-slate-400 text-[10px] md:text-xs pt-2">&copy; 2026 All rights reserved</p>
+            {/* আপডেট করা প্রিমিয়াম কন্টাক্ট বক্স */}
+            <div className="mt-12 bg-white rounded-[2rem] p-6 md:p-8 max-w-sm mx-auto shadow-2xl shadow-indigo-100/50 border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+              {/* উপরের কালারফুল বর্ডার লাইন */}
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-400 via-sky-400 to-indigo-500"></div>
+              
+              <h3 className="font-black text-slate-800 text-sm md:text-base uppercase tracking-widest mb-4 text-center">
+                👨‍💻 Developer Info
+              </h3>
+              
+              <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100/80">
+                <div className="flex flex-col gap-3 text-xs md:text-sm">
+                  <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
+                    <span className="text-slate-500 font-bold">Developed By</span>
+                    <span className="font-black text-indigo-600">Niloy Saha</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <span className="text-slate-500 font-bold text-center">Contact Email</span>
+                    <span className="font-bold text-slate-700 bg-white px-3 py-2 rounded-xl text-center shadow-sm border border-slate-200 select-all hover:border-indigo-300 transition-colors cursor-text">
+                      niloysaha5522@gmail.com
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-5 text-center">
+                <p className="text-slate-400 text-[10px] md:text-xs font-black tracking-[0.2em] uppercase">
+                  &copy; 2026 All Rights Reserved
+                </p>
               </div>
             </div>
+
           </div>
         )}
 
