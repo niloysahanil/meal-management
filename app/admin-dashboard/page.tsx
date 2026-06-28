@@ -3,7 +3,17 @@ import React, { useState, useEffect } from 'react';
 import { db } from "@/lib/firebase"; 
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
-interface Member { id: string; name: string; regularMeals: number; regularMealsUpdatedAt?: string; guestMeals: number; guestMealsUpdatedAt?: string; deposit: number; }
+interface Member { 
+  id: string; 
+  name: string; 
+  regularMeals: number; 
+  regularMealsUpdatedAt?: string; 
+  regMealsToday?: number; // আজকের মিল ট্র্যাক রাখার জন্য নতুন ফিল্ড
+  guestMeals: number; 
+  guestMealsUpdatedAt?: string; 
+  gstMealsToday?: number; // আজকের গেস্ট মিল ট্র্যাক রাখার জন্য নতুন ফিল্ড
+  deposit: number; 
+}
 interface Expense { id: string; item: string; amount: number; date?: string; }
 
 export default function AdminDashboard() {
@@ -40,7 +50,18 @@ export default function AdminDashboard() {
         setExpenses(loadedExpenses);
 
         const initialInputs: typeof inputMeals = {};
-        loadedMembers.forEach(m => { initialInputs[m.id] = { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() }; });
+        const todayStr = new Date().toDateString();
+
+        loadedMembers.forEach(m => {
+          // চেক করা হচ্ছে সার্ভারের লাস্ট আপডেট আজকের নাকি আগের দিনের
+          const isSameDayReg = m.regularMealsUpdatedAt ? new Date(m.regularMealsUpdatedAt).toDateString() === todayStr : false;
+          const isSameDayGst = m.guestMealsUpdatedAt ? new Date(m.guestMealsUpdatedAt).toDateString() === todayStr : false;
+
+          initialInputs[m.id] = { 
+            reg: isSameDayReg ? (m.regMealsToday ?? 0).toString() : "0", 
+            gst: isSameDayGst ? (m.gstMealsToday ?? 0).toString() : "0" 
+          };
+        });
         setInputMeals(initialInputs);
       } catch (err) {
         console.error("Firebase Load Error:", err);
@@ -55,7 +76,17 @@ export default function AdminDashboard() {
   const updateUIAndInputs = (updated: Member[]) => {
     setMembers(updated);
     const updatedInputs = { ...inputMeals };
-    updated.forEach(m => { updatedInputs[m.id] = { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() }; });
+    const todayStr = new Date().toDateString();
+
+    updated.forEach(m => {
+      const isSameDayReg = m.regularMealsUpdatedAt ? new Date(m.regularMealsUpdatedAt).toDateString() === todayStr : false;
+      const isSameDayGst = m.guestMealsUpdatedAt ? new Date(m.guestMealsUpdatedAt).toDateString() === todayStr : false;
+
+      updatedInputs[m.id] = { 
+        reg: isSameDayReg ? (m.regMealsToday ?? 0).toString() : "0", 
+        gst: isSameDayGst ? (m.gstMealsToday ?? 0).toString() : "0" 
+      };
+    });
     setInputMeals(updatedInputs);
   };
 
@@ -87,22 +118,65 @@ export default function AdminDashboard() {
   const handleBulkSaveMeals = async (e: React.FormEvent) => {
     e.preventDefault();
     const batch = writeBatch(db);
+    const now = new Date();
 
     const updated = members.map(m => {
-      const inputs = inputMeals[m.id] || { reg: m.regularMeals.toString(), gst: m.guestMeals.toString() };
+      const inputs = inputMeals[m.id] || { reg: "0", gst: "0" };
       const newReg = parseFloat(inputs.reg) || 0;
       const newGst = parseFloat(inputs.gst) || 0;
       
       const regTime = checkTimeLimit(m.regularMealsUpdatedAt, 3);
       const gstTime = checkTimeLimit(m.guestMealsUpdatedAt, 3);
       
-      let finalReg = m.regularMeals, regTimeText = m.regularMealsUpdatedAt;
-      let finalGst = m.guestMeals, gstTimeText = m.guestMealsUpdatedAt;
+      let finalReg = m.regularMeals, regTimeText = m.regularMealsUpdatedAt, finalRegToday = m.regMealsToday || 0;
+      let finalGst = m.guestMeals, gstTimeText = m.guestMealsUpdatedAt, finalGstToday = m.gstMealsToday || 0;
 
-      if (regTime.allowed && newReg !== m.regularMeals) { finalReg = newReg; regTimeText = new Date().toISOString(); }
-      if (gstTime.allowed && newGst !== m.guestMeals) { finalGst = newGst; gstTimeText = new Date().toISOString(); }
+      // রেগুলার মিল ক্যালকুলেশন লজিক
+      if (regTime.allowed) {
+        const isDifferentDay = !m.regularMealsUpdatedAt || new Date(m.regularMealsUpdatedAt).toDateString() !== now.toDateString();
+        
+        if (isDifferentDay) {
+          // নতুন দিন হলে সরাসরি আগের টোটালের সাথে যোগ হবে
+          finalReg = m.regularMeals + newReg;
+          finalRegToday = newReg;
+          regTimeText = now.toISOString();
+        } else {
+          // একই দিন ৩ ঘণ্টার লক উইন্ডোতে থাকলে আগের ইনপুট বাদ দিয়ে নতুনটা অ্যাডজাস্ট হবে
+          if (newReg !== m.regMealsToday) {
+            finalReg = m.regularMeals - (m.regMealsToday || 0) + newReg;
+            finalRegToday = newReg;
+            regTimeText = now.toISOString();
+          }
+        }
+      }
 
-      const updatedMem = { ...m, regularMeals: finalReg, regularMealsUpdatedAt: regTimeText, guestMeals: finalGst, guestMealsUpdatedAt: gstTimeText };
+      // গেস্ট মিল ক্যালকুলেশন লজিক
+      if (gstTime.allowed) {
+        const isDifferentDay = !m.guestMealsUpdatedAt || new Date(m.guestMealsUpdatedAt).toDateString() !== now.toDateString();
+        
+        if (isDifferentDay) {
+          finalGst = m.guestMeals + newGst;
+          finalGstToday = newGst;
+          gstTimeText = now.toISOString();
+        } else {
+          if (newGst !== m.gstMealsToday) {
+            finalGst = m.guestMeals - (m.gstMealsToday || 0) + newGst;
+            finalGstToday = newGst;
+            gstTimeText = now.toISOString();
+          }
+        }
+      }
+
+      const updatedMem = { 
+        ...m, 
+        regularMeals: finalReg, 
+        regularMealsUpdatedAt: regTimeText, 
+        regMealsToday: finalRegToday,
+        guestMeals: finalGst, 
+        guestMealsUpdatedAt: gstTimeText,
+        gstMealsToday: finalGstToday
+      };
+      
       batch.set(doc(db, "members", m.id), updatedMem);
       return updatedMem;
     });
@@ -121,7 +195,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!newMemberName.trim()) return;
     
-    const newMember: Member = { id: Date.now().toString(), name: newMemberName, regularMeals: 0, guestMeals: 0, deposit: 0 };
+    const newMember: Member = { id: Date.now().toString(), name: newMemberName, regularMeals: 0, guestMeals: 0, deposit: 0, regMealsToday: 0, gstMealsToday: 0 };
     try {
       await setDoc(doc(db, "members", newMember.id), newMember);
       updateUIAndInputs([...members, newMember]);
@@ -217,7 +291,7 @@ export default function AdminDashboard() {
         const totalCost = mMeals * mRate;
         const finalBalance = m.deposit - totalCost; 
         
-        const resetM = { ...m, regularMeals: 0, guestMeals: 0, deposit: parseFloat(finalBalance.toFixed(2)), regularMealsUpdatedAt: "", guestMealsUpdatedAt: "" };
+        const resetM = { ...m, regularMeals: 0, guestMeals: 0, deposit: parseFloat(finalBalance.toFixed(2)), regularMealsUpdatedAt: "", guestMealsUpdatedAt: "", regMealsToday: 0, gstMealsToday: 0 };
         batch.set(doc(db, "members", m.id), resetM);
         return resetM;
       });
@@ -321,7 +395,10 @@ export default function AdminDashboard() {
                           <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-100 to-indigo-50 text-indigo-600 flex items-center justify-center text-sm font-black uppercase shadow-inner shrink-0">
                             {m.name[0]}
                           </div>
-                          <span className="font-bold text-base text-slate-800 break-words">{m.name}</span>
+                          <div className="flex flex-col">
+                            <span className="font-bold text-base text-slate-800 break-words">{m.name}</span>
+                            <span className="text-[11px] font-medium text-slate-400 mt-0.5">মাসের মোট মিল: {m.regularMeals + m.guestMeals}</span>
+                          </div>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3 md:gap-6 xl:justify-end">
