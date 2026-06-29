@@ -4,9 +4,9 @@ import { db } from "@/lib/firebase";
 import { collection, getDocs, query, onSnapshot } from "firebase/firestore";
 
 interface Member { id: string; name: string; regularMeals: number; guestMeals: number; deposit: number; }
-interface Expense { id: string; item: string; amount: number; date?: string; }
+interface Expense { id: string; item: string; amount: number; date?: string | any; }
 interface ArchivedMember { name: string; deposit: number; totalMeals: number; totalCost: number; status: number | string; }
-interface MonthHistory { id: string; monthName: string; mealRate: string | number; totalExpenses: number; totalMeals: number; members: ArchivedMember[]; expenses?: Expense[]; closedAt?: string; }
+interface MonthHistory { id: string; monthName: string; mealRate: string | number; totalExpenses: number; totalMeals: number; members: ArchivedMember[]; expenses?: Expense[]; closedAt?: string | any; }
 
 export default function UserDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -15,6 +15,26 @@ export default function UserDashboard() {
   const [userTab, setUserTab] = useState<"live" | "bazar" | "history">("live");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [timeGreeting, setTimeGreeting] = useState({ title: "Welcome!", subtitle: "" });
+
+  // ফায়ারবেস টাইমস্ট্যাম্প এবং রেগুলার ডেট সেফলি ফরম্যাট করার হেল্পার ফাংশন
+  const formatDate = (dateField: any) => {
+    if (!dateField) return "N/A";
+    // যদি ফায়ারবেস টাইমস্ট্যাম্প অবজেক্ট হয়
+    if (typeof dateField === 'object' && 'seconds' in dateField) {
+      return new Date(dateField.seconds * 1000).toLocaleDateString('en-GB');
+    }
+    const parsed = new Date(dateField);
+    return isNaN(parsed.getTime()) ? "N/A" : parsed.toLocaleDateString('en-GB');
+  };
+
+  // সর্টিং এর জন্য সেফলি মিলিসেকেন্ড বের করার ফাংশন
+  const getMs = (dateField: any) => {
+    if (!dateField) return 0;
+    if (typeof dateField === 'object' && 'seconds' in dateField) {
+      return dateField.seconds * 1000;
+    }
+    return new Date(dateField).getTime() || 0;
+  };
 
   // টাইম ভিত্তিক গ্রিটিং লজিক
   useEffect(() => {
@@ -61,10 +81,8 @@ export default function UserDashboard() {
             fetchedData.push({ id: doc.id, ...doc.data() } as MonthHistory);
           });
           
-          fetchedData.sort((a, b) => {
-            if(a.closedAt && b.closedAt) return new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime();
-            return 0;
-          });
+          // টাইমস্ট্যাম্প সেফ সর্টিং লজিক
+          fetchedData.sort((a, b) => getMs(b.closedAt) - getMs(a.closedAt));
 
           setHistory(fetchedData);
         } catch (error) {
@@ -155,7 +173,7 @@ export default function UserDashboard() {
                       <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
                         <td className="p-3 md:p-4 flex items-center gap-2 md:gap-3">
                           <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-black uppercase group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors shrink-0">
-                            {m.name[0]}
+                            {m.name ? m.name[0] : "?"}
                           </div>
                           <span className="text-slate-800 font-bold whitespace-nowrap">{m.name}</span>
                         </td>
@@ -178,15 +196,12 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            {/* আপডেট করা প্রিমিয়াম কন্টাক্ট বক্স */}
+            {/* প্রিমিয়াম কন্টাক্ট বক্স */}
             <div className="mt-12 bg-white rounded-[2rem] p-6 md:p-8 max-w-sm mx-auto shadow-2xl shadow-indigo-100/50 border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-              {/* উপরের কালারফুল বর্ডার লাইন */}
               <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-emerald-400 via-sky-400 to-indigo-500"></div>
-              
               <h3 className="font-black text-slate-800 text-sm md:text-base uppercase tracking-widest mb-4 text-center">
                 👨‍💻 Developer Info
               </h3>
-              
               <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100/80">
                 <div className="flex flex-col gap-3 text-xs md:text-sm">
                   <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
@@ -201,14 +216,12 @@ export default function UserDashboard() {
                   </div>
                 </div>
               </div>
-              
               <div className="mt-5 text-center">
                 <p className="text-slate-400 text-[10px] md:text-xs font-black tracking-[0.2em] uppercase">
                   &copy; 2026 All Rights Reserved
                 </p>
               </div>
             </div>
-
           </div>
         )}
 
@@ -217,7 +230,6 @@ export default function UserDashboard() {
             <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-4 md:mb-6 flex items-center gap-2">
               <span>🛒</span> Current Month Bazar List
             </h2>
-            
             {expenses.length === 0 ? (
               <div className="bg-white p-12 text-center rounded-3xl border border-slate-100">
                 <div className="text-4xl mb-4 opacity-50">💸</div>
@@ -238,7 +250,7 @@ export default function UserDashboard() {
                       {[...expenses].reverse().map((e, index) => (
                         <tr key={e.id || index} className="hover:bg-slate-50/80 transition-colors">
                           <td className="p-3 text-slate-400 font-bold whitespace-nowrap">
-                            {e.date ? new Date(e.date).toLocaleDateString('en-GB') : "Live"}
+                            {e.date ? formatDate(e.date) : "Live"}
                           </td>
                           <td className="p-3 text-slate-800 font-bold">{e.item}</td>
                           <td className="p-3 text-right text-rose-500 font-black">৳ {e.amount}</td>
@@ -295,14 +307,16 @@ export default function UserDashboard() {
                         </tr>
                       </thead>
                       <tbody className="font-semibold text-slate-600 divide-y divide-slate-50">
-                        {h.members.map((mem, idx) => {
-                          const finalBalance = mem.deposit - mem.totalCost;
+                        {(h.members || []).map((mem, idx) => {
+                          const depositVal = Number(mem.deposit) || 0;
+                          const costVal = Number(mem.totalCost) || 0;
+                          const finalBalance = depositVal - costVal;
                           return (
                             <tr key={idx} className="hover:bg-slate-50/50 transition">
                               <td className="p-3 md:p-4 font-bold text-slate-800 whitespace-nowrap">{mem.name}</td>
-                              <td className="p-3 md:p-4 text-center text-emerald-500 whitespace-nowrap">৳{mem.deposit}</td>
+                              <td className="p-3 md:p-4 text-center text-emerald-500 whitespace-nowrap">৳{depositVal}</td>
                               <td className="p-3 md:p-4 text-center">{mem.totalMeals}</td>
-                              <td className="p-3 md:p-4 text-center text-rose-400 whitespace-nowrap">৳{mem.totalCost}</td>
+                              <td className="p-3 md:p-4 text-center text-rose-400 whitespace-nowrap">৳{costVal}</td>
                               <td className="p-3 md:p-4 text-right whitespace-nowrap">
                                 {finalBalance >= 0 ? (
                                   <span className="bg-emerald-100 text-emerald-700 px-2 md:px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black">
@@ -336,7 +350,7 @@ export default function UserDashboard() {
                           <tbody className="divide-y divide-slate-50 text-slate-500 font-medium">
                             {h.expenses.map((exp, eIdx) => (
                               <tr key={eIdx}>
-                                <td className="p-2 text-slate-400">{exp.date ? new Date(exp.date).toLocaleDateString('en-GB') : "N/A"}</td>
+                                <td className="p-2 text-slate-400">{formatDate(exp.date)}</td>
                                 <td className="p-2 font-bold text-slate-700">{exp.item}</td>
                                 <td className="p-2 text-right text-rose-500 font-bold">৳{exp.amount}</td>
                               </tr>
